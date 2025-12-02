@@ -1,4 +1,6 @@
 # CD/CI Tutorial Sample Application
+Status of build on master branch:
+[![Build Status](https://vito-fordless-connectedly.ngrok-free.dev/buildStatus/icon?job=CICDPeEx+app%2Fmaster)](https://vito-fordless-connectedly.ngrok-free.dev/job/CICDPeEx%20app/job/master/)
 
 ## Description
 
