@@ -6,6 +6,7 @@ pipeline {
     INVENTORY = 'ansible/inventory.ini'
     PLAYBOOK  = 'ansible/deploy.yml'
     ARTIFACT_VERSION = readFile('version').trim()
+    EMAIL_USERNAME = 'Jenkins'
   }
 
   stages {
@@ -99,12 +100,47 @@ pipeline {
     }
   }
 
-  post {
+post {
     success {
-      echo "Deployment finished: SUCCESS"
+        emailext(
+            subject: "SUCCESS: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build succeeded.\n${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: SUCCESS"
     }
+
     failure {
-      echo "Deployment finished: FAILURE"
+        emailext(
+            subject: "FAILURE: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build failed.\n${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: FAILURE"
     }
-  }
+
+    aborted {
+        emailext(
+            subject: "ABORTED: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build was manually aborted.\n${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: ABORTED"
+    }
+
+    unstable {
+        emailext(
+            subject: "UNSTABLE: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build is unstable.\n${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: UNSTABLE"
+    }
+}
+
+
 }
