@@ -6,6 +6,7 @@ pipeline {
     INVENTORY = 'ansible/inventory.ini'
     PLAYBOOK  = 'ansible/deploy.yml'
     ARTIFACT_VERSION = readFile('version').trim()
+    EMAIL_USERNAME = 'Jenkins'
   }
 
   stages {
@@ -99,12 +100,25 @@ pipeline {
     }
   }
 
-  post {
+post {
     success {
-      echo "Deployment finished: SUCCESS"
+        emailext (
+            subject: "SUCCESS: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build ${env.JOB_NAME} #${env.BUILD_NUMBER} succeeded.\nCheck it here: ${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: SUCCESS"
     }
     failure {
-      echo "Deployment finished: FAILURE"
+        emailext (
+            subject: "FAILURE: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build ${env.JOB_NAME} #${env.BUILD_NUMBER} failed.\nCheck it here: ${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: FAILURE"
     }
-  }
+}
+
 }
