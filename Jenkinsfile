@@ -102,23 +102,45 @@ pipeline {
 
 post {
     success {
-        emailext (
+        emailext(
             subject: "SUCCESS: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-            body: "Build ${env.JOB_NAME} #${env.BUILD_NUMBER} succeeded.\nCheck it here: ${env.BUILD_URL}",
+            body: "Build succeeded.\n${env.BUILD_URL}",
             to: '$DEFAULT_RECIPIENTS',
             from: "${EMAIL_USERNAME}"
         )
         echo "Deployment finished: SUCCESS"
     }
+
     failure {
-        emailext (
+        emailext(
             subject: "FAILURE: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-            body: "Build ${env.JOB_NAME} #${env.BUILD_NUMBER} failed.\nCheck it here: ${env.BUILD_URL}",
+            body: "Build failed.\n${env.BUILD_URL}",
             to: '$DEFAULT_RECIPIENTS',
             from: "${EMAIL_USERNAME}"
         )
         echo "Deployment finished: FAILURE"
     }
+
+    aborted {
+        emailext(
+            subject: "ABORTED: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build was manually aborted.\n${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: ABORTED"
+    }
+
+    unstable {
+        emailext(
+            subject: "UNSTABLE: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "Build is unstable.\n${env.BUILD_URL}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Deployment finished: UNSTABLE"
+    }
 }
+
 
 }
