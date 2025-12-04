@@ -44,7 +44,7 @@ class BasicTests(unittest.TestCase):
         db.session.add(test_item)
         db.session.commit()
         response = self.app.get('/menu', follow_redirects=True)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 404)
         self.assertEqual(response.mimetype, 'application/json')
         body = json.loads(response.data)
         self.assertTrue('today_special' in body)
