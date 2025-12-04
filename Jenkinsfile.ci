@@ -1,6 +1,11 @@
 pipeline {
   agent any
 
+  environment {
+    ARTIFACT_VERSION = readFile('version').trim()
+    EMAIL_USERNAME = 'Jenkins'
+  }
+
   stages {
     stage('Tests') {
       when { changeRequest() }
