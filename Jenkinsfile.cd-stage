@@ -2,43 +2,25 @@ pipeline {
   agent any
 
   environment {
+    ANSIBLE_HOST_KEY_CHECKING = 'False'
+    INVENTORY = 'ansible/inventory.ini'
+    PLAYBOOK  = 'ansible/deploy.yml'
     ARTIFACT_VERSION = readFile('version').trim()
     EMAIL_USERNAME = 'Jenkins'
   }
 
   stages {
-    stage('Tests') {
+    stage('Approval for Stage') {
       steps {
-        sh '''
-          python3 -m venv venv
-          . venv/bin/activate
-          pip install -r requirements.txt
-          pip install coverage  
-          coverage run -m unittest discover tests
-          coverage xml -o coverage.xml
-          deactivate
-        '''
-      }
-    }
-
-    stage('SonarQube Analysis') {
-      steps {
-        withSonarQubeEnv('mySonarQube') {
-          sh '''
-            sonar-scanner \
-              -Dsonar.projectKey=cicd-app \
-              -Dsonar.sources=. \
-              -Dsonar.python.coverage.reportPaths=coverage.xml
-          '''
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to staging?', ok: 'Approve'
         }
       }
     }
 
-    stage('SonarQube Quality Gate') {
+    stage('Deploy to Stage') {
       steps {
-        timeout(time: 10, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
-        }
+        sh 'make deploy-stage'
       }
     }
   }
