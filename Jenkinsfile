@@ -52,13 +52,17 @@ pipeline {
       }
     }
 
-    stage('Deploy to stage (PR only)') {
-      when {
-        anyOf {
-          changeRequest();
-          branch 'master';
+    stage('Approval for Stage') {
+      when { changeRequest() }
+      steps {
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to staging?', ok: 'Approve'
         }
       }
+    }
+
+    stage('Deploy to stage') {
+      when { changeRequest(); }
       steps {
           sh '''
             make deploy-stage
@@ -72,6 +76,15 @@ pipeline {
     //       sh "docker build -t cicd-app:${ARTIFACT_VERSION} ."
     //   }
     // }
+
+    stage('Approval for Production') {
+      when { branch 'master' }
+      steps {
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to production?', ok: 'Approve'
+        }
+      }
+    }
 
     stage('Build Docker image') {
       when { branch 'master' }
