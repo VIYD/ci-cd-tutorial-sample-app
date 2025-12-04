@@ -37,11 +37,11 @@ build:
 login:
 	@docker login
 
-push: login build
+push: login
 	@echo "Pushing $(FULL_IMAGE)"
 	docker push $(FULL_IMAGE)
 
-push-latest: login build
+push-latest: login
 	@echo "Tagging $(FULL_IMAGE) as $(IMAGE):latest and pushing"
 	docker tag $(FULL_IMAGE) $(IMAGE):latest
 	docker push $(FULL_IMAGE)

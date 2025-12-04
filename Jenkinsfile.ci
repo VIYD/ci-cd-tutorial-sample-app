@@ -1,0 +1,84 @@
+pipeline {
+  agent any
+
+  stages {
+    stage('Tests') {
+      when { changeRequest() }
+      steps {
+        sh '''
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install -r requirements.txt
+          pip install coverage  
+          coverage run -m unittest discover tests
+          coverage xml -o coverage.xml
+        '''
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      when { changeRequest() }
+      steps {
+        withSonarQubeEnv('mySonarQube') {
+          sh '''
+            sonar-scanner \
+              -Dsonar.projectKey=cicd-app \
+              -Dsonar.sources=. \
+              -Dsonar.python.coverage.reportPaths=coverage.xml
+          '''
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      when { changeRequest() }
+      steps {
+        timeout(time: 10, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+  }
+
+post {
+    success {
+        emailext(
+            subject: "SUCCESS: CI for ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CI step succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: SUCCESS"
+    }
+
+    failure {
+        emailext(
+            subject: "FAILURE: CI for ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CI step failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: FAILURE"
+    }
+
+    aborted {
+        emailext(
+            subject: "ABORTED: CI for ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CI was manually aborted.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: ABORTED"
+    }
+
+    unstable {
+        emailext(
+            subject: "UNSTABLE: CI for ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CI is unstable.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: UNSTABLE"
+    }
+}
+}

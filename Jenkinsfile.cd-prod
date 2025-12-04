@@ -1,0 +1,99 @@
+pipeline {
+  agent any
+
+  environment {
+    ARTIFACT_VERSION = readFile('version').trim()
+  }
+
+  stages {
+    stage('Build Docker image') {
+      when { branch 'master' }
+      steps {
+        sh "TAG=${ARTIFACT_VERSION} make build"
+      }
+    }
+
+    stage('Push Docker image') {
+      when { branch 'master' }
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'DOCKERHUB',
+          usernameVariable: 'USERNAME',
+          passwordVariable: 'PASSWORD'
+        )]) {
+          sh "TAG=${ARTIFACT_VERSION} make push-latest"
+        }
+      }
+    }
+
+    stage('Approval for Production') {
+      when { branch 'master' }
+      steps {
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to production?', ok: 'Approve'
+        }
+      }
+    }
+
+    stage('Deploy to production') {
+      when { branch 'master' }
+      steps {
+        withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
+          sh '''
+            KCFG=$(mktemp)
+            chmod 600 "$KCFG"
+            trap "rm -f $KCFG" EXIT
+
+            ansible-vault view ansible/kubeconfig.vault \
+              --vault-password-file=<(echo "$VAULTPASS") \
+              > "$KCFG"
+
+            kubectl --kubeconfig="$KCFG" rollout restart deployment cicd-app
+          '''
+        }
+      }
+    }
+  }
+
+post {
+    success {
+        emailext(
+            subject: "SUCCESS: CD for production ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for production succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: SUCCESS"
+    }
+
+    failure {
+        emailext(
+            subject: "FAILURE: CD for production ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for production failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: FAILURE"
+    }
+
+    aborted {
+        emailext(
+            subject: "ABORTED: CD for production ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for production was manually aborted.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: ABORTED"
+    }
+
+    unstable {
+        emailext(
+            subject: "UNSTABLE: CD for production ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for production is unstable.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: UNSTABLE"
+    }
+}
+}

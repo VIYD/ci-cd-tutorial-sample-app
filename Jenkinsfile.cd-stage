@@ -1,0 +1,72 @@
+pipeline {
+  agent any
+    environment {
+        ANSIBLE_HOST_KEY_CHECKING = 'False'
+        INVENTORY = 'ansible/inventory.ini'
+        PLAYBOOK  = 'ansible/deploy.yml'
+        ARTIFACT_VERSION = readFile('version').trim()
+        EMAIL_USERNAME = 'Jenkins'
+    }
+
+  stages {
+    stage('Approval for Stage') {
+      when { changeRequest() }
+      steps {
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to staging?', ok: 'Approve'
+        }
+      }
+    }
+
+    stage('Deploy to stage') {
+      when { changeRequest() }
+      steps {
+          sh '''
+            make deploy-stage
+          '''
+      }
+    }
+  }
+
+post {
+    success {
+        emailext(
+            subject: "SUCCESS: CD for stage ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for stage succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: SUCCESS"
+    }
+
+    failure {
+        emailext(
+            subject: "FAILURE: CD for stage ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for stage failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: FAILURE"
+    }
+
+    aborted {
+        emailext(
+            subject: "ABORTED: CD for stage ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for stage was manually aborted.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: ABORTED"
+    }
+
+    unstable {
+        emailext(
+            subject: "UNSTABLE: CD for stage ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            body: "CD for stage is unstable.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Job finished: UNSTABLE"
+    }
+}
+}

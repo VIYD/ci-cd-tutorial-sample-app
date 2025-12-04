@@ -73,6 +73,13 @@ pipeline {
     //   }
     // }
 
+    stage('Build Docker image') {
+      when { branch 'master' }
+      steps {
+        sh "TAG=${ARTIFACT_VERSION} make build"
+      }
+    }
+
     stage('Push Docker image to Docker Hub') {
       when { branch 'master' }
       steps {
