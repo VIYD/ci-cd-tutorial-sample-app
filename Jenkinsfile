@@ -102,7 +102,7 @@ pipeline {
             trap "rm -f $KCFG" EXIT
 
             # decrypt vault to the temp file
-            ansible-vault view kubeconfig.vault \
+            ansible-vault view ansible/kubeconfig.vault \
               --vault-password-file=<(echo "$VAULTPASS") \
               > "$KCFG"
 
