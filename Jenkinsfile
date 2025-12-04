@@ -76,9 +76,7 @@ pipeline {
     stage('Push Docker image to Docker Hub') {
       when { branch 'master' }
       steps {
-        script {
-          sh "docker tag cicd-app:${ARTIFACT_VERSION} viyd/cicd-app:${ARTIFACT_VERSION}"
-    
+        script {    
           withCredentials([usernamePassword(
               credentialsId: 'DOCKERHUB',
               usernameVariable: 'USERNAME',
@@ -93,8 +91,23 @@ pipeline {
     stage('Deploy to production') {
       when { branch 'master' }
       steps {
-        withCredentials([file(credentialsId: 'jenkins-kubeconfig', variable: 'KCFG')]) {
-          sh "kubectl --kubeconfig=$KCFG rollout restart deployment cicd-app"
+        withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
+
+          sh '''
+            # create secure temp file
+            KCFG=$(mktemp)
+            chmod 600 "$KCFG"
+
+            # ensure cleanup on exit
+            trap "rm -f $KCFG" EXIT
+
+            # decrypt vault to the temp file
+            ansible-vault view kubeconfig.vault \
+              --vault-password-file=<(echo "$VAULTPASS") \
+              > "$KCFG"
+
+            kubectl --kubeconfig="$KCFG" rollout restart deployment cicd-app
+          '''
         }
       }
     }
