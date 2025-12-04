@@ -117,7 +117,7 @@ post {
     success {
         emailext(
             subject: "SUCCESS: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-            body: "Build succeeded.\n${env.BUILD_URL}",
+            body: "Build succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
             to: '$DEFAULT_RECIPIENTS',
             from: "${EMAIL_USERNAME}"
         )
@@ -127,7 +127,7 @@ post {
     failure {
         emailext(
             subject: "FAILURE: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-            body: "Build failed.\n${env.BUILD_URL}",
+            body: "Build failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
             to: '$DEFAULT_RECIPIENTS',
             from: "${EMAIL_USERNAME}"
         )
@@ -137,7 +137,7 @@ post {
     aborted {
         emailext(
             subject: "ABORTED: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-            body: "Build was manually aborted.\n${env.BUILD_URL}",
+            body: "Build was manually aborted.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
             to: '$DEFAULT_RECIPIENTS',
             from: "${EMAIL_USERNAME}"
         )
@@ -147,7 +147,7 @@ post {
     unstable {
         emailext(
             subject: "UNSTABLE: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-            body: "Build is unstable.\n${env.BUILD_URL}",
+            body: "Build is unstable.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit hash: ${GIT_COMMIT}\nBranch: ${GIT_BRANCH}",
             to: '$DEFAULT_RECIPIENTS',
             from: "${EMAIL_USERNAME}"
         )
