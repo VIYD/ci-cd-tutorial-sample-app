@@ -1,0 +1,79 @@
+pipeline {
+  agent any
+
+  environment {
+    ARTIFACT_VERSION = readFile('version').trim()
+    EMAIL_USERNAME = 'Jenkins'
+  }
+
+  stages {
+
+    stage('Approval for Production') {
+      when { branch 'master' }
+      steps {
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to production?', ok: 'Approve'
+        }
+      }
+    }
+
+    stage('Build Docker image') {
+      when { branch 'master' }
+      steps {
+        sh "TAG=${ARTIFACT_VERSION} make build"
+      }
+    }
+
+    stage('Push Docker image') {
+      when { branch 'master' }
+      steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'DOCKERHUB',
+            usernameVariable: 'USERNAME',
+            passwordVariable: 'PASSWORD'
+        )]) {
+          sh "TAG=${ARTIFACT_VERSION} make push-latest"
+        }
+      }
+    }
+
+    stage('Deploy to Production') {
+      when { branch 'master' }
+      steps {
+        withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
+          sh '''
+            KCFG=$(mktemp)
+            chmod 600 "$KCFG"
+            trap "rm -f $KCFG" EXIT
+
+            ansible-vault view ansible/kubeconfig.vault \
+              --vault-password-file=<(echo "$VAULTPASS") \
+              > "$KCFG"
+
+            kubectl --kubeconfig="$KCFG" rollout restart deployment cicd-app
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      emailext(
+        subject: "SUCCESS: CICD ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: "CICD succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
+        to: '$DEFAULT_RECIPIENTS',
+        from: "${EMAIL_USERNAME}"
+      )
+    }
+
+    failure {
+      emailext(
+        subject: "FAILURE: CICD ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: "CICD failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
+        to: '$DEFAULT_RECIPIENTS',
+        from: "${EMAIL_USERNAME}"
+      )
+    }
+  }
+}
