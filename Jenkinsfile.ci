@@ -1,0 +1,87 @@
+pipeline {
+  agent any
+
+  environment {
+    ANSIBLE_HOST_KEY_CHECKING = 'False'
+    INVENTORY = 'ansible/inventory.ini'
+    PLAYBOOK  = 'ansible/deploy.yml'
+    ARTIFACT_VERSION = readFile('version').trim()
+    EMAIL_USERNAME = 'Jenkins'
+  }
+
+  stages {
+    stage('Tests') {
+      when { changeRequest() }
+      steps {
+        sh '''
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install -r requirements.txt
+          pip install coverage  
+          coverage run -m unittest discover tests
+          coverage xml -o coverage.xml
+          deactivate
+        '''
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      when { changeRequest() }
+      steps {
+        withSonarQubeEnv('mySonarQube') {
+          sh '''
+            sonar-scanner \
+              -Dsonar.projectKey=cicd-app \
+              -Dsonar.sources=. \
+              -Dsonar.python.coverage.reportPaths=coverage.xml
+          '''
+        }
+      }
+    }
+
+    stage('SonarQube Quality Gate') {
+      when { changeRequest() }
+      steps {
+        timeout(time: 10, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+
+    stage('Approval for Stage') {
+      when { changeRequest() }
+      steps {
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to staging?', ok: 'Approve'
+        }
+      }
+    }
+
+    stage('Deploy to Stage') {
+      when { changeRequest() }
+      steps {
+        sh 'make deploy-stage'
+      }
+    }
+  }
+
+  post {
+    success {
+      emailext(
+        subject: "SUCCESS: PR CI ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: "PR CI succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
+        to: '$DEFAULT_RECIPIENTS',
+        from: "${EMAIL_USERNAME}"
+      )
+    }
+
+    failure {
+      emailext(
+        subject: "FAILURE: PR CI ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: "PR CI failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
+        to: '$DEFAULT_RECIPIENTS',
+        from: "${EMAIL_USERNAME}"
+      )
+    }
+  }
+}
