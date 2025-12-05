@@ -67,7 +67,7 @@ pipeline {
     stage('Promote dev image to production-ready (remove dev suffix)') {
       steps {
         sh '''
-        docker tag cicd-app:${ARTIFACT_VERSION}-dev cicd-app:${ARTIFACT_VERSION}
+        docker tag viyd/cicd-app:${ARTIFACT_VERSION}-dev viyd/cicd-app:${ARTIFACT_VERSION}
         '''
       }
     }
