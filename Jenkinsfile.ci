@@ -49,7 +49,7 @@ pipeline {
               usernameVariable: 'USERNAME',
               passwordVariable: 'PASSWORD'
           )]) {
-            sh "TAG=${ARTIFACT_VERSION} make push"
+            sh "TAG=${ARTIFACT_VERSION}-dev make push"
           }
         }
       }
