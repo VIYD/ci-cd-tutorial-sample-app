@@ -64,9 +64,11 @@ pipeline {
       }
     }
 
-    stage('Build Docker image') {
+    stage('Promote dev image to production-ready (remove dev suffix)') {
       steps {
-        sh "TAG=${ARTIFACT_VERSION} make build"
+        sh '''
+        docker tag cicd-app:${ARTIFACT_VERSION}-dev cicd-app:${ARTIFACT_VERSION}
+        '''
       }
     }
 
