@@ -7,6 +7,22 @@ pipeline {
   }
 
   stages {
+    stage('Notify Github ')
+    {
+      steps {
+        script {
+          def GITHUB_CONTEXT = 'CI/CD Pipeline'
+          def GITHUB_DESCRIPTION = "Jenkins PR CI #${env.BUILD_NUMBER} is running"
+          def GITHUB_TARGET_URL = "${env.BUILD_URL}"
+
+          githubNotify context: GITHUB_CONTEXT,
+                        description: GITHUB_DESCRIPTION,
+                        status: 'PENDING',
+                        targetUrl: GITHUB_TARGET_URL
+        }
+      }
+    }
+
     stage('Tests') {
       steps {
         sh '''
@@ -51,6 +67,10 @@ pipeline {
         to: '$DEFAULT_RECIPIENTS',
         from: "${EMAIL_USERNAME}"
       )
+      githubNotify context: 'CI/CD Pipeline',
+                    description: "Jenkins PR CI #${env.BUILD_NUMBER} succeeded",
+                    status: 'SUCCESS',
+                    targetUrl: "${env.BUILD_URL}"
     }
 
     failure {
@@ -60,6 +80,10 @@ pipeline {
         to: '$DEFAULT_RECIPIENTS',
         from: "${EMAIL_USERNAME}"
       )
+      githubNotify context: 'CI/CD Pipeline',
+                    description: "Jenkins PR CI #${env.BUILD_NUMBER} failed",
+                    status: 'FAILURE',
+                    targetUrl: "${env.BUILD_URL}"
     }
   }
 }
