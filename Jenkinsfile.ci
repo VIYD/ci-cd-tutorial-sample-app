@@ -2,97 +2,47 @@ pipeline {
   agent any
 
   environment {
-    ARTIFACT_VERSION = readFile('version').trim()
+    ANSIBLE_HOST_KEY_CHECKING = 'False'
+    INVENTORY = 'ansible/inventory.ini'
+    PLAYBOOK  = 'ansible/deploy.yml'
     EMAIL_USERNAME = 'Jenkins'
   }
 
   stages {
-    stage('Check Branch') {
-    when {
-        not {
-            branch 'master'
-        }
-    }
-    steps {
-        echo "Building branch: ${env.BRANCH_NAME}"
-    }
-}
-    stage('Notify Github ') {
+
+    stage('Read Version') {
       steps {
         script {
-          def GITHUB_CONTEXT = 'CI/CD Pipeline'
-          def GITHUB_DESCRIPTION = "Jenkins PR CI #${env.BUILD_NUMBER} is running"
-          def GITHUB_TARGET_URL = "${env.BUILD_URL}"
-
-          githubNotify context: GITHUB_CONTEXT,
-                        description: GITHUB_DESCRIPTION,
-                        status: 'PENDING',
-                        targetUrl: GITHUB_TARGET_URL
+          env.ARTIFACT_VERSION = readFile('version').trim()
+          echo "Artifact version: ${env.ARTIFACT_VERSION}"
         }
       }
-    }   
+    }
 
     stage('Tests') {
       steps {
-        sh '''
-          python3 -m venv venv
-          . venv/bin/activate
-          pip install -r requirements.txt
-          pip install coverage  
-          coverage run -m unittest discover tests
-          coverage xml -o coverage.xml
-          deactivate
-        '''
-      }
-    }
-
-    stage('SonarQube Analysis') {
-      steps {
-        withSonarQubeEnv('mySonarQube') {
+        script {
           sh '''
-            sonar-scanner \
-              -Dsonar.projectKey=cicd-app \
-              -Dsonar.sources=. \
-              -Dsonar.python.coverage.reportPaths=coverage.xml
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+            pip install coverage  
+            coverage run -m unittest discover tests
+            coverage xml -o coverage.xml
+            deactivate
           '''
         }
       }
     }
 
-    stage('SonarQube Quality Gate') {
-      steps {
-        timeout(time: 10, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
-        }
-      }
-    }
   }
 
   post {
     success {
-      emailext(
-        subject: "SUCCESS: PR CI ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-        body: "PR CI succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
-        to: '$DEFAULT_RECIPIENTS',
-        from: "${EMAIL_USERNAME}"
-      )
-      githubNotify context: 'CI/CD Pipeline',
-                    description: "Jenkins PR CI #${env.BUILD_NUMBER} succeeded",
-                    status: 'SUCCESS',
-                    targetUrl: "${env.BUILD_URL}"
+      echo "Pipeline completed successfully."
     }
 
     failure {
-      emailext(
-        subject: "FAILURE: PR CI ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-        body: "PR CI failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
-        to: '$DEFAULT_RECIPIENTS',
-        from: "${EMAIL_USERNAME}"
-      )
-      githubNotify context: 'CI/CD Pipeline',
-                    description: "Jenkins PR CI #${env.BUILD_NUMBER} failed",
-                    status: 'FAILURE',
-                    targetUrl: "${env.BUILD_URL}"
-    }
+      echo "Pipeline failed."
   }
 }

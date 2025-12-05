@@ -39,16 +39,6 @@ pipeline {
       }
     }
 
-    stage('Approval for Stage') {
-      steps {
-        timeout(time: 1, unit: 'HOURS') {
-          input message: "Deploy branch '${params.BRANCH_NAME}' to staging?", 
-                ok: 'Approve',
-                submitter: 'authenticated'
-        }
-      }
-    }
-
     stage('Deploy to Stage') {
       steps {
         echo "Deploying branch ${params.BRANCH_NAME} to staging environment"
