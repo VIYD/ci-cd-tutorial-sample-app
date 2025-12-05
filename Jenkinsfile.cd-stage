@@ -1,25 +1,57 @@
 pipeline {
   agent any
 
+  parameters {
+    string(
+      name: 'BRANCH_NAME',
+      defaultValue: 'develop',
+      description: 'Branch to deploy to staging'
+    )
+  }
+
   environment {
     ANSIBLE_HOST_KEY_CHECKING = 'False'
     INVENTORY = 'ansible/inventory.ini'
     PLAYBOOK  = 'ansible/deploy.yml'
-    ARTIFACT_VERSION = readFile('version').trim()
     EMAIL_USERNAME = 'Jenkins'
   }
 
   stages {
+    stage('Checkout') {
+      steps {
+        script {
+          echo "Checking out branch: ${params.BRANCH_NAME}"
+          checkout([
+            $class: 'GitSCM',
+            branches: [[name: "*/${params.BRANCH_NAME}"]],
+            userRemoteConfigs: scm.userRemoteConfigs
+          ])
+        }
+      }
+    }
+
+    stage('Read Version') {
+      steps {
+        script {
+          env.ARTIFACT_VERSION = readFile('version').trim()
+          echo "Artifact version: ${env.ARTIFACT_VERSION}"
+        }
+      }
+    }
+
     stage('Approval for Stage') {
       steps {
         timeout(time: 1, unit: 'HOURS') {
-          input message: 'Deploy to staging?', ok: 'Approve'
+          input message: "Deploy branch '${params.BRANCH_NAME}' to staging?", 
+                ok: 'Approve',
+                submitter: 'authenticated'
         }
       }
     }
 
     stage('Deploy to Stage') {
       steps {
+        echo "Deploying branch ${params.BRANCH_NAME} to staging environment"
         sh 'make deploy-stage'
       }
     }
@@ -28,8 +60,12 @@ pipeline {
   post {
     success {
       emailext(
-        subject: "SUCCESS: PR CI ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-        body: "PR CI succeeded.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
+        subject: "SUCCESS: Stage Deployment ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """Stage deployment succeeded.
+        Branch: ${params.BRANCH_NAME}
+        Build URL: ${env.BUILD_URL}
+        Version: ${env.ARTIFACT_VERSION}
+        Commit: ${env.GIT_COMMIT}""",
         to: '$DEFAULT_RECIPIENTS',
         from: "${EMAIL_USERNAME}"
       )
@@ -37,8 +73,12 @@ pipeline {
 
     failure {
       emailext(
-        subject: "FAILURE: PR CI ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-        body: "PR CI failed.\n${env.BUILD_URL}\nVersion: ${ARTIFACT_VERSION}\nCommit: ${GIT_COMMIT}",
+        subject: "FAILURE: Stage Deployment ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """Stage deployment failed.
+        Branch: ${params.BRANCH_NAME}
+        Build URL: ${env.BUILD_URL}
+        Version: ${env.ARTIFACT_VERSION}
+        Commit: ${env.GIT_COMMIT}""",
         to: '$DEFAULT_RECIPIENTS',
         from: "${EMAIL_USERNAME}"
       )

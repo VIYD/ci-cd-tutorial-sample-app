@@ -11,7 +11,6 @@ pipeline {
 
   stages {
     stage('Tests') {
-      when { changeRequest() }
       steps {
         script {
           sh '''
@@ -28,7 +27,6 @@ pipeline {
     }
 
     stage('SonarQube Analysis') {
-      when { changeRequest() }
       steps {
         script {
           withSonarQubeEnv('mySonarQube') {
@@ -44,29 +42,10 @@ pipeline {
     }
 
     stage('SonarQube Quality Gate') {
-      when { changeRequest() }
       steps {
         timeout(time: 10, unit: 'MINUTES') {
           waitForQualityGate abortPipeline: true
         }
-      }
-    }
-
-    stage('Approval for Stage') {
-      when { changeRequest() }
-      steps {
-        timeout(time: 1, unit: 'HOURS') {
-          input message: 'Deploy to staging?', ok: 'Approve'
-        }
-      }
-    }
-
-    stage('Deploy to stage') {
-      when { changeRequest(); }
-      steps {
-          sh '''
-            make deploy-stage
-          '''
       }
     }
 
@@ -78,7 +57,6 @@ pipeline {
     // }
 
     stage('Approval for Production') {
-      when { branch 'master' }
       steps {
         timeout(time: 1, unit: 'HOURS') {
           input message: 'Deploy to production?', ok: 'Approve'
@@ -87,14 +65,12 @@ pipeline {
     }
 
     stage('Build Docker image') {
-      when { branch 'master' }
       steps {
         sh "TAG=${ARTIFACT_VERSION} make build"
       }
     }
 
     stage('Push Docker image to Docker Hub') {
-      when { branch 'master' }
       steps {
         script {    
           withCredentials([usernamePassword(
@@ -109,7 +85,6 @@ pipeline {
     }
 
     stage('Deploy to production') {
-      when { branch 'master' }
       steps {
         withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
 
