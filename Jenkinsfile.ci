@@ -7,8 +7,17 @@ pipeline {
   }
 
   stages {
-    stage('Notify Github ')
-    {
+    stage('Check Branch') {
+    when {
+        not {
+            branch 'master'
+        }
+    }
+    steps {
+        echo "Building branch: ${env.BRANCH_NAME}"
+    }
+}
+    stage('Notify Github ') {
       steps {
         script {
           def GITHUB_CONTEXT = 'CI/CD Pipeline'
@@ -21,7 +30,7 @@ pipeline {
                         targetUrl: GITHUB_TARGET_URL
         }
       }
-    }
+    }   
 
     stage('Tests') {
       steps {
