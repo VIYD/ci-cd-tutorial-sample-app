@@ -1,0 +1,86 @@
+pipeline {
+    agent any
+
+    environment {
+        SA_NAME = "jenkins-sa"
+        NAMESPACE = "default"
+        JENKINS_HOME = '/var/lib/jenkins'
+        VAULT_FILE = "kubeconfig.vault"
+    }
+
+    stages {
+
+        stage('Create fresh kubeconfig') {
+            steps {
+                withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
+                    sh '''
+                        set -e
+
+                        TMP_KCFG=$(mktemp)
+                        chmod 600 "$TMP_KCFG"
+
+                        API_SERVER=$(kubectl config view --minify --output=jsonpath='{.clusters[0].cluster.server}')
+
+                        CA_DATA=$(kubectl config view --raw --minify --output=jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+
+                        SECRET_NAME=$(kubectl -n ${NAMESPACE} get sa ${SA_NAME} -o jsonpath='{.secrets[0].name}')
+                        TOKEN=$(kubectl -n ${NAMESPACE} get secret $SECRET_NAME -o jsonpath='{.data.token}' | base64 -d)
+
+                        cat > "$TMP_KCFG" <<EOF
+apiVersion: v1
+kind: Config
+
+clusters:
+- name: minikube
+  cluster:
+    certificate-authority-data: ${CA_DATA}
+    server: ${API_SERVER}
+
+contexts:
+- name: jenkins-context
+  context:
+    cluster: minikube
+    user: jenkins-sa
+
+current-context: jenkins-context
+
+users:
+- name: jenkins-sa
+  user:
+    token: ${TOKEN}
+EOF
+
+                        # encrypt new kubeconfig into ansible vault
+                        ansible-vault encrypt "$TMP_KCFG" \
+                          --vault-password-file=<(echo "$VAULTPASS") \
+                          --output ${JENKINS_HOME}/${VAULT_FILE}
+
+                        echo "New kubeconfig generated and encrypted successfully."
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+    success {
+        emailext(
+            subject: "SUCCESS: Rotation of kubeconfig was successful ${env.JOB_NAME}",
+            body: "Rotation succeeded.",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Rotation finished: SUCCESS"
+    }
+
+    failure {
+        emailext(
+            subject: "FAILURE: Rotation of kubeconfig was unsuccessful ${env.JOB_NAME}",
+            body: "Rotation failed.",
+            to: '$DEFAULT_RECIPIENTS',
+            from: "${EMAIL_USERNAME}"
+        )
+        echo "Rotation finished: FAILURE"
+    }
+}
+}
