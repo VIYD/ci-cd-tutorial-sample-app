@@ -4,29 +4,45 @@ pipeline {
     environment {
         SA_NAME = "jenkins-sa"
         NAMESPACE = "default"
-        JENKINS_HOME = '/var/lib/jenkins'
         VAULT_FILE = "kubeconfig.vault"
+        JENKINS_HOME = '/var/lib/jenkins'
     }
 
     stages {
 
-        stage('Create fresh kubeconfig') {
+        stage('Rotate kubeconfig') {
             steps {
                 withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
                     sh '''
                         set -e
 
-                        TMP_KCFG=$(mktemp)
-                        chmod 600 "$TMP_KCFG"
+                        # temp files
+                        OLD_KCFG=$(mktemp)
+                        NEW_KCFG=$(mktemp)
+                        chmod 600 "$OLD_KCFG" "$NEW_KCFG"
 
-                        API_SERVER=$(kubectl config view --minify --output=jsonpath='{.clusters[0].cluster.server}')
+                        # decrypt current kubeconfig
+                        ansible-vault view "${JENKINS_HOME}/${VAULT_FILE}" \
+                          --vault-password-file=<(echo "$VAULTPASS") \
+                          > "$OLD_KCFG"
 
-                        CA_DATA=$(kubectl config view --raw --minify --output=jsonpath='{.clusters[0].cluster.certificate-authority-data}')
 
-                        SECRET_NAME=$(kubectl -n ${NAMESPACE} get sa ${SA_NAME} -o jsonpath='{.secrets[0].name}')
-                        TOKEN=$(kubectl -n ${NAMESPACE} get secret $SECRET_NAME -o jsonpath='{.data.token}' | base64 -d)
+                        API_SERVER=$(kubectl --kubeconfig="$OLD_KCFG" \
+                            config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 
-                        cat > "$TMP_KCFG" <<EOF
+                        CA_DATA=$(kubectl --kubeconfig="$OLD_KCFG" \
+                            config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+
+
+                        TOKEN=$(kubectl --kubeconfig="$OLD_KCFG" \
+                            -n ${NAMESPACE} create token ${SA_NAME})
+
+                        if [ -z "$TOKEN" ]; then
+                          echo "ERROR: Unable to generate ServiceAccount token"
+                          exit 1
+                        fi
+
+                        cat > "$NEW_KCFG" <<EOF
 apiVersion: v1
 kind: Config
 
@@ -50,12 +66,14 @@ users:
     token: ${TOKEN}
 EOF
 
-                        # encrypt new kubeconfig into ansible vault
-                        ansible-vault encrypt "$TMP_KCFG" \
-                          --vault-password-file=<(echo "$VAULTPASS") \
-                          --output ${JENKINS_HOME}/${VAULT_FILE}
 
-                        echo "New kubeconfig generated and encrypted successfully."
+                        ansible-vault encrypt "$NEW_KCFG" \
+                          --vault-password-file=<(echo "$VAULTPASS") \
+                          --output "${JENKINS_HOME}/${VAULT_FILE}"
+
+                        echo "New kubeconfig created successfully."
+
+                        rm -f "$OLD_KCFG" "$NEW_KCFG"
                     '''
                 }
             }
@@ -68,7 +86,6 @@ EOF
             subject: "SUCCESS: Rotation of kubeconfig was successful ${env.JOB_NAME}",
             body: "Rotation succeeded.",
             to: '$DEFAULT_RECIPIENTS',
-            from: "${EMAIL_USERNAME}"
         )
         echo "Rotation finished: SUCCESS"
     }
@@ -78,7 +95,6 @@ EOF
             subject: "FAILURE: Rotation of kubeconfig was unsuccessful ${env.JOB_NAME}",
             body: "Rotation failed.",
             to: '$DEFAULT_RECIPIENTS',
-            from: "${EMAIL_USERNAME}"
         )
         echo "Rotation finished: FAILURE"
     }
