@@ -14,7 +14,7 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
                     sh '''
-                        set -e
+                        set -e +x
 
                         # temp files
                         OLD_KCFG=$(mktemp)
@@ -71,7 +71,11 @@ EOF
                           --vault-password-file=<(echo "$VAULTPASS") \
                           --output "${JENKINS_HOME}/${VAULT_FILE}"
 
+                        set -x
+
                         echo "New kubeconfig created successfully."
+
+                        set +x
 
                         rm -f "$OLD_KCFG" "$NEW_KCFG"
                     '''
