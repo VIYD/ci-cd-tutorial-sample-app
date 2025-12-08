@@ -1,0 +1,106 @@
+pipeline {
+    agent any
+
+    environment {
+        SA_NAME = "jenkins-sa"
+        NAMESPACE = "default"
+        VAULT_FILE = "kubeconfig.vault"
+        JENKINS_HOME = '/var/lib/jenkins'
+    }
+
+    stages {
+
+        stage('Rotate kubeconfig') {
+            steps {
+                withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
+                    sh '''
+                        set -e +x
+
+                        # temp files
+                        OLD_KCFG=$(mktemp)
+                        NEW_KCFG=$(mktemp)
+                        chmod 600 "$OLD_KCFG" "$NEW_KCFG"
+
+                        # decrypt current kubeconfig
+                        ansible-vault view "${JENKINS_HOME}/${VAULT_FILE}" \
+                          --vault-password-file=<(echo "$VAULTPASS") \
+                          > "$OLD_KCFG"
+
+
+                        API_SERVER=$(kubectl --kubeconfig="$OLD_KCFG" \
+                            config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+
+                        CA_DATA=$(kubectl --kubeconfig="$OLD_KCFG" \
+                            config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+
+
+                        TOKEN=$(kubectl --kubeconfig="$OLD_KCFG" \
+                            -n ${NAMESPACE} create token ${SA_NAME})
+
+                        if [ -z "$TOKEN" ]; then
+                          echo "ERROR: Unable to generate ServiceAccount token"
+                          exit 1
+                        fi
+
+                        cat > "$NEW_KCFG" <<EOF
+apiVersion: v1
+kind: Config
+
+clusters:
+- name: minikube
+  cluster:
+    certificate-authority-data: ${CA_DATA}
+    server: ${API_SERVER}
+
+contexts:
+- name: jenkins-context
+  context:
+    cluster: minikube
+    user: jenkins-sa
+
+current-context: jenkins-context
+
+users:
+- name: jenkins-sa
+  user:
+    token: ${TOKEN}
+EOF
+
+
+                        ansible-vault encrypt "$NEW_KCFG" \
+                          --vault-password-file=<(echo "$VAULTPASS") \
+                          --output "${JENKINS_HOME}/${VAULT_FILE}"
+
+                        set -x
+
+                        echo "New kubeconfig created successfully."
+
+                        set +x
+
+                        rm -f "$OLD_KCFG" "$NEW_KCFG"
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+    success {
+        emailext(
+            subject: "SUCCESS: Rotation of kubeconfig was successful ${env.JOB_NAME}",
+            body: "Rotation succeeded.",
+            to: '$DEFAULT_RECIPIENTS',
+        )
+        echo "Rotation finished: SUCCESS"
+    }
+
+    failure {
+        emailext(
+            subject: "FAILURE: Rotation of kubeconfig was unsuccessful ${env.JOB_NAME}",
+            body: "Rotation failed.",
+            to: '$DEFAULT_RECIPIENTS',
+        )
+        echo "Rotation finished: FAILURE"
+    }
+}
+}

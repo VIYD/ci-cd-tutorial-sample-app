@@ -7,6 +7,7 @@ pipeline {
     PLAYBOOK  = 'ansible/deploy.yml'
     ARTIFACT_VERSION = readFile('version').trim()
     EMAIL_USERNAME = 'Jenkins'
+    JENKINS_HOME = '/var/lib/jenkins'
   }
 
   stages {
@@ -91,15 +92,12 @@ pipeline {
         withCredentials([string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS')]) {
 
           sh '''
-            # create secure temp file
             KCFG=$(mktemp)
             chmod 600 "$KCFG"
 
-            # ensure cleanup on exit
             trap "rm -f $KCFG" EXIT
 
-            # decrypt vault to the temp file
-            ansible-vault view ansible/kubeconfig.vault \
+            ansible-vault view ${JENKINS_HOME}/kubeconfig.vault \
               --vault-password-file=<(echo "$VAULTPASS") \
               > "$KCFG"
 
