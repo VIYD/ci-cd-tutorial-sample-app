@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'INIT_TOKEN', defaultValue: '', description: 'Manually created ServiceAccount token')
+    }
+
+    environment {
+        VAULT_FILE   = "kubeconfig.vault"
+        JENKINS_HOME = "/var/lib/jenkins"
+        API_SERVER = "https://192.168.49.2:8443"
+    }
+
+    stages {
+
+        stage('Create initial kubeconfig') {
+            steps { 
+                withCredentials([
+                    string(credentialsId: 'ansible-vault-pass', variable: 'VAULTPASS'),
+                    string(credentialsId: 'kube-ca-data',      variable: 'CA_DATA')
+                    ]) {
+
+                    sh '''
+                        set -e +x
+
+                        if [ -z "$INIT_TOKEN" ]; then
+                            echo "ERROR: INIT_TOKEN parameter is empty"
+                            exit 1
+                        fi
+
+                        TMP_KCFG=$(mktemp)
+                        chmod 600 "$TMP_KCFG"
+
+                        cat > "$TMP_KCFG" <<EOF
+apiVersion: v1
+kind: Config
+
+clusters:
+- name: minikube
+  cluster:
+    certificate-authority-data: ${CA_DATA}
+    server: ${API_SERVER}
+
+contexts:
+- name: jenkins-context
+  context:
+    cluster: minikube
+    user: jenkins-sa
+
+current-context: jenkins-context
+
+users:
+- name: jenkins-sa
+  user:
+    token: ${INIT_TOKEN}
+EOF
+
+                        ansible-vault encrypt "$TMP_KCFG" \
+                          --vault-password-file=<(echo "$VAULTPASS") \
+                          --output "${JENKINS_HOME}/${VAULT_FILE}"
+
+                        set -x
+                        echo "Initial kubeconfig created and encrypted."
+                        set +x
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script { sh 'rm -f "$TMP_KCFG"' }
+        }
+        failure {
+            script { sh 'rm -f "$TMP_KCFG"' }
+        }
+    }
+}
